@@ -2644,16 +2644,12 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
         listDelNode(server.clients, server.migrate_data_client->client_list_node);
         aeDeleteFileEvent(server.el, server.migrate_data_fd, AE_READABLE | AE_WRITABLE);
         aeCreateFileEvent(server.el, server.migrate_data_fd, AE_READABLE, migrateDataWaitTarget, NULL);
-        serverLog(LL_WARNING, "migrate data cost %lld",
-                  (server.migrate_data_end - server.migrate_data_begin));
     }
 
     if (server.migrate_data_state == MIGRATE_DATA_FAIL_FINISH_RDB ||
         server.migrate_data_state == MIGRATE_DATA_FINISH_RDB) {
         close(server.rdb_pipe_read_result_from_child);
         close(server.rdb_pipe_write_result_to_parent);
-        serverLog(LL_WARNING, "migrate data cost %lld",
-                  (server.migrate_data_end - server.migrate_data_begin));
         return;
     }
 

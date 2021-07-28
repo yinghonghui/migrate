@@ -686,7 +686,7 @@ void feedMigrateData(struct redisCommand *cmd, int dictid, robj **argv, int argc
         listAddNodeTail(server.migrate_data_list_buf, buf);
     } else {
         sds value = server.migrate_data_list_buf->tail->value;
-        if (sdslen(value) > 1024 * 100) {
+        if (sdslen(value) > 1024 * 10) {
             listAddNodeTail(server.migrate_data_list_buf, buf);
         } else {
             server.migrate_data_list_buf->tail->value = sdscatlen(value, buf, sdslen(buf));

@@ -1184,14 +1184,21 @@ void databasesCron(void) {
         }
         if (server.import_data_state == IMPORT_DATA_FINISH_ANALYSIS) {
             long long start = timeInMilliseconds();
+            int dict_finish = 0;
             for (j = 0; j < server.dbnum; j++) {
                 redisDb *targetDb = server.db + j;
                 redisDb *sourceDb = server.migrateDb + j;
                 dict *sourceDict = sourceDb->dict;
                 dict *targetDict = targetDb->dict;
-                if (dictSize(sourceDict) == 0) continue;
-                if (dictIsRehashing(targetDict)) {
+                if (dictSize(sourceDict) == 0) {
+                    if (j == server.dbnum - 1) {
+                        dict_finish = 1;
+                    }
                     continue;
+                }
+
+                if (dictIsRehashing(targetDict)) {
+                    break;
                 }
                 if (dictSize(targetDict) == 0) {
                     dictExpand(targetDict, sourceDict->ht->used);
@@ -1220,16 +1227,25 @@ void databasesCron(void) {
                     sourceDict->ht[0].table[sourceDict->rehashidx] = NULL;
                     sourceDict->rehashidx++;
                 }
+                if (j == server.dbnum - 1) {
+                    dict_finish = 1;
+                }
             }
+            int expires_finish = 0;
 
             for (j = 0; j < server.dbnum; j++) {
                 redisDb *targetDb = server.db + j;
                 redisDb *sourceDb = server.migrateDb + j;
                 dict *sourceDict = sourceDb->expires;
                 dict *targetDict = targetDb->expires;
-                if (dictSize(sourceDict) == 0) continue;
-                if (dictIsRehashing(targetDict)) {
+                if (dictSize(sourceDict) == 0) {
+                    if (j == server.dbnum - 1) {
+                        expires_finish = 1;
+                    }
                     continue;
+                }
+                if (dictIsRehashing(targetDict)) {
+                    break;
                 }
                 if (dictSize(targetDict) == 0) {
                     dictExpand(targetDict, sourceDict->ht->used);
@@ -1258,13 +1274,17 @@ void databasesCron(void) {
                     sourceDict->ht[0].table[sourceDict->rehashidx] = NULL;
                     sourceDict->rehashidx++;
                 }
+                if (j == server.dbnum - 1) {
+                    expires_finish = 1;
+                }
             }
-
-            long long end = timeInMilliseconds();
-            serverLog(LL_WARNING, "cost time %lld to finish import data to db", (end - start));
-            aeCreateFileEvent(server.el, server.import_data_client->fd, AE_READABLE | AE_WRITABLE,
-                              importDataFinishIntoDb, NULL);
-            server.import_data_state = IMPORT_DATA_FINISH_INTO_DB;
+            if (dict_finish && expires_finish) {
+                long long end = timeInMilliseconds();
+                serverLog(LL_WARNING, "cost time %lld to finish import data to db", (end - start));
+                aeCreateFileEvent(server.el, server.import_data_client->fd, AE_READABLE | AE_WRITABLE,
+                                  importDataFinishIntoDb, NULL);
+                server.import_data_state = IMPORT_DATA_FINISH_INTO_DB;
+            }
         }
 
         /* Rehash */
@@ -2199,7 +2219,7 @@ void adjustOpenFilesLimit(void) {
  * to the value of /proc/sys/net/core/somaxconn, or warn about it. */
 void checkTcpBacklogSettings(void) {
 #ifdef HAVE_PROC_SOMAXCONN
-                                                                                                                            FILE *fp = fopen("/proc/sys/net/core/somaxconn","r");
+    FILE *fp = fopen("/proc/sys/net/core/somaxconn","r");
     char buf[1024];
     if (!fp) return;
     if (fgets(buf,sizeof(buf),fp) != NULL) {
@@ -4039,7 +4059,7 @@ void monitorCommand(client *c) {
 /* =================================== Main! ================================ */
 
 #ifdef __linux__
-                                                                                                                        int linuxOvercommitMemoryValue(void) {
+int linuxOvercommitMemoryValue(void) {
     FILE *fp = fopen("/proc/sys/vm/overcommit_memory","r");
     char buf[64];
 
@@ -4201,7 +4221,7 @@ void setupSignalHandlers(void) {
     sigaction(SIGINT, &act, NULL);
 
 #ifdef HAVE_BACKTRACE
-                                                                                                                            sigemptyset(&act.sa_mask);
+    sigemptyset(&act.sa_mask);
     act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
     act.sa_sigaction = sigsegvHandler;
     sigaction(SIGSEGV, &act, NULL);
@@ -4270,7 +4290,7 @@ void redisOutOfMemoryHandler(size_t allocation_size) {
 
 void redisSetProcTitle(char *title) {
 #ifdef USE_SETPROCTITLE
-                                                                                                                            char *server_mode = "";
+    char *server_mode = "";
     if (server.cluster_enabled) server_mode = " [cluster]";
     else if (server.sentinel_mode) server_mode = " [sentinel]";
 
@@ -4386,7 +4406,7 @@ int main(int argc, char **argv) {
     int j;
 
 #ifdef REDIS_TEST
-                                                                                                                            if (argc == 3 && !strcasecmp(argv[1], "test")) {
+    if (argc == 3 && !strcasecmp(argv[1], "test")) {
         if (!strcasecmp(argv[2], "ziplist")) {
             return ziplistTest(argc, argv);
         } else if (!strcasecmp(argv[2], "quicklist")) {

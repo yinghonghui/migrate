@@ -4,12 +4,9 @@
 
 void migrateDataIncrementReadTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
     char buf[1024];
-    long long start = timeInMilliseconds();
-    serverLog(LL_WARNING, "begin read");
-    ssize_t buflen = read(fd, buf, sizeof(buf));
+    read(fd, buf, sizeof(buf));
     aeDeleteFileEvent(server.el, fd, AE_READABLE | AE_WRITABLE);
     aeCreateFileEvent(server.el, server.migrate_data_fd, AE_WRITABLE, migrateDataWaitTarget, NULL);
-    serverLog(LL_WARNING, "111111111 cost %ld time %lld", buflen, (timeInMilliseconds() - start));
 }
 
 void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
@@ -32,7 +29,7 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
     }
     if (server.migrate_data_state == MIGRATE_DATA_BEGIN_INCREMENT) {
-        serverLog(LL_WARNING, "begin to send increment data %ld", server.migrate_data_list_buf->len);
+//        serverLog(LL_WARNING, "begin to send increment data %ld", server.migrate_data_list_buf->len);
         if (server.migrate_data_list_buf->len == 0) {
             server.startSlot = -1;
             server.endSlot = -1;
@@ -48,19 +45,17 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         sds buf = server.migrate_data_list_buf->head->value;
-        serverLog(LL_WARNING, "begin write");
         if (write(fd, buf, sdslen(buf)) == -1) {
             serverLog(LL_WARNING, "fail to send increment data %s", strerror(errno));
             server.migrate_data_state = MIGRATE_DATA_FAIL_SEND_INCREMENT_DATA;
             goto error;
         } else {
             listDelNode(server.migrate_data_list_buf, server.migrate_data_list_buf->head);
-            sdsfree(buf);
             server.migrate_data_end = timeInMilliseconds();
             aeDeleteFileEvent(server.el, fd, AE_READABLE | AE_WRITABLE);
             aeCreateFileEvent(server.el, fd, AE_READABLE, migrateDataIncrementReadTarget, NULL);
-            serverLog(LL_WARNING, "success to send part increment data cost %lld",
-                      (server.migrate_data_end - server.migrate_data_begin));
+//            serverLog(LL_WARNING, "success to send part increment data cost %lld",
+//                      (server.migrate_data_end - server.migrate_data_begin));
             if (server.migrate_data_list_buf->len == 0) {
                 server.startSlot = -1;
                 server.endSlot = -1;
@@ -133,6 +128,7 @@ void startMigrateData(aeEventLoop *el, int fd, void *privdata, int mask) {
                 serverLog(LL_WARNING, "Background migrate data by rdb");
                 server.migrate_data_state = MIGRATE_DATA_SUCCESS_START_RDB;
                 server.migrate_data_list_buf = listCreate();
+                listSetFreeMethod(server.migrate_data_list_buf, (void (*)(void *)) sdsfree);
                 return;
             }
         } else {
@@ -160,6 +156,12 @@ void startMigrateData(aeEventLoop *el, int fd, void *privdata, int mask) {
 void migrateDataCommand(client *c) {
     if (server.migrate_data_state > MIGRATE_DATA_INIT) {
         robj *res = createObject(OBJ_STRING, sdsnew("-can not start\r\n"));
+        addReply(c, res);
+        decrRefCount(res);
+        return;
+    }
+    if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) {
+        robj *res = createObject(OBJ_STRING, sdsnew("-can not start has child pid\r\n"));
         addReply(c, res);
         decrRefCount(res);
         return;
