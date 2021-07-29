@@ -1490,11 +1490,11 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         if (childpid == -1) {
             closeChildInfoPipe();
             server.lastbgsave_status = C_ERR;
-            serverLog(LL_WARNING, "Can't save in background: fork: %s",
-                      strerror(errno));
+            serverLog(LL_WARNING, "Can't save in background: fork: %s cost %lld",
+                      strerror(errno), server.stat_fork_time);
             return C_ERR;
         }
-        serverLog(LL_NOTICE, "Background saving started by pid %d", childpid);
+        serverLog(LL_NOTICE, "Background saving started by pid %d cost %lld", childpid, server.stat_fork_time);
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
         server.rdb_child_type = RDB_CHILD_TYPE_DISK;
@@ -2628,6 +2628,12 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
                   "Background RDB transfer terminated with success");
         if (server.migrate_data_state == MIGRATE_DATA_SUCCESS_START_RDB) {
             server.migrate_data_state = MIGRATE_DATA_FINISH_RDB;
+            anetNonBlock(NULL, server.migrate_data_fd);
+            serverLog(LL_NOTICE, "success migrate data by rdb part");
+            server.migrate_data_client = createClient(server.migrate_data_fd);
+            listDelNode(server.clients, server.migrate_data_client->client_list_node);
+            aeDeleteFileEvent(server.el, server.migrate_data_fd, AE_READABLE | AE_WRITABLE);
+            aeCreateFileEvent(server.el, server.migrate_data_fd, AE_READABLE, migrateDataWaitTarget, NULL);
         }
     } else if (!bysignal && exitcode != 0) {
         serverLog(LL_WARNING, "Background transfer error");
@@ -2639,20 +2645,13 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
                   "Background transfer terminated by signal %d", bysignal);
         if (server.migrate_data_state == MIGRATE_DATA_SUCCESS_START_RDB) {
             server.migrate_data_state = MIGRATE_DATA_FAIL_FINISH_RDB;
+            close(server.migrate_data_fd);
         }
     }
     server.rdb_child_pid = -1;
     server.rdb_child_type = RDB_CHILD_TYPE_NONE;
     server.rdb_save_time_start = -1;
 
-    if (server.migrate_data_state == MIGRATE_DATA_FINISH_RDB) {
-        anetNonBlock(NULL, server.migrate_data_fd);
-        serverLog(LL_NOTICE, "success migrate data by rdb part");
-        server.migrate_data_client = createClient(server.migrate_data_fd);
-        listDelNode(server.clients, server.migrate_data_client->client_list_node);
-        aeDeleteFileEvent(server.el, server.migrate_data_fd, AE_READABLE | AE_WRITABLE);
-        aeCreateFileEvent(server.el, server.migrate_data_fd, AE_READABLE, migrateDataWaitTarget, NULL);
-    }
 
     if (server.migrate_data_state == MIGRATE_DATA_FAIL_FINISH_RDB ||
         server.migrate_data_state == MIGRATE_DATA_FINISH_RDB) {
@@ -2783,6 +2782,8 @@ int migrateDataRdbSaveToTargetSockets(rdbSaveInfo *rsi, int fd) {
 
     /* Child */
 
+    serverLog(LL_NOTICE, "begin rdb for migrate data");
+
     if ((childpid = fork()) == 0) {
         /* Child */
         int retval;
@@ -2813,6 +2814,7 @@ int migrateDataRdbSaveToTargetSockets(rdbSaveInfo *rsi, int fd) {
         rioFreeFdset(&slave_sockets);
         exitFromChild((retval == C_OK) ? 0 : 1);
     } else {
+        serverLog(LL_NOTICE, "finish rdb for migrate data");
         /* Parent */
         if (childpid == -1) {
             serverLog(LL_WARNING, "Can't save in background: fork: %s",
@@ -2830,8 +2832,8 @@ int migrateDataRdbSaveToTargetSockets(rdbSaveInfo *rsi, int fd) {
                                     (1024 * 1024 * 1024); /* GB per second. */
             latencyAddSampleIfNeeded("fork", server.stat_fork_time / 1000);
 
-            serverLog(LL_NOTICE, "Background RDB transfer started by pid %d",
-                      childpid);
+            serverLog(LL_NOTICE, "Background RDB transfer started by pid %d cost %lld",
+                      childpid, server.stat_fork_time);
             server.rdb_save_time_start = time(NULL);
             server.rdb_child_pid = childpid;
             server.rdb_child_type = RDB_CHILD_TYPE_SOCKET;

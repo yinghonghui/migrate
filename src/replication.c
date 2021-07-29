@@ -1607,7 +1607,10 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
  */
 
 
-char *sendSynchronousCommand(int flags, int fd, ...) {
+char *sendSynchronousCommand(int flags, long long timeout, int fd, ...) {
+    if (timeout <= 0) {
+        timeout = server.repl_syncio_timeout * 1000;
+    }
 
     /* Create the command to send to the master, we use redis binary
      * protocol to make sure correct arguments are sent. This function
@@ -1739,7 +1742,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
         }
 
         /* Issue the PSYNC command */
-        reply = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "PSYNC", psync_replid, psync_offset, NULL);
+        reply = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "PSYNC", psync_replid, psync_offset, NULL);
         if (reply != NULL) {
             serverLog(LL_WARNING, "Unable to send PSYNC to master: %s", reply);
             sdsfree(reply);
@@ -1750,7 +1753,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
     }
 
     /* Reading half */
-    reply = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+    reply = sendSynchronousCommand(SYNC_CMD_READ, -1, fd, NULL);
     if (sdslen(reply) == 0) {
         /* The master may send empty newlines after it receives PSYNC
          * and before to reply, just to keep the connection alive. */
@@ -1919,14 +1922,14 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* Send the PING, don't check for errors at all, we have the timeout
          * that will take care about this. */
         /* 发送 PING，根本不检查错误，我们有超时来处理这个。 */
-        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "PING", NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "PING", NULL);
         if (err) goto write_error;
         return;
     }
 
     /* Receive the PONG command. */
     if (server.repl_state == REPL_STATE_RECEIVE_PONG) {
-        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, -1, fd, NULL);
 
         /* We accept only two replies as valid, a positive +PONG reply
          * (we just check for "+") or an authentication error.
@@ -1950,7 +1953,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* AUTH with the master if required. */
     if (server.repl_state == REPL_STATE_SEND_AUTH) {
         if (server.masterauth) {
-            err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "AUTH", server.masterauth, NULL);
+            err = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "AUTH", server.masterauth, NULL);
             if (err) goto write_error;
             server.repl_state = REPL_STATE_RECEIVE_AUTH;
             return;
@@ -1961,7 +1964,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive AUTH reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_AUTH) {
-        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, -1, fd, NULL);
         if (err[0] == '-') {
             serverLog(LL_WARNING, "Unable to AUTH to MASTER: %s", err);
             sdsfree(err);
@@ -1978,7 +1981,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (server.repl_state == REPL_STATE_SEND_PORT) {
         sds port = sdsfromlonglong(server.slave_announce_port ?
                                    server.slave_announce_port : server.port);
-        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "REPLCONF",
                                      "listening-port", port, NULL);
         sdsfree(port);
         if (err) goto write_error;
@@ -1989,7 +1992,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF listening-port reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_PORT) {
-        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, -1, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -2009,7 +2012,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* Set the slave ip, so that Master's INFO command can list the
      * slave IP address port correctly in case of port forwarding or NAT. */
     if (server.repl_state == REPL_STATE_SEND_IP) {
-        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "REPLCONF",
                                      "ip-address", server.slave_announce_ip, NULL);
         if (err) goto write_error;
         sdsfree(err);
@@ -2019,7 +2022,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF ip-address reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_IP) {
-        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, -1, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -2037,7 +2040,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      *
      * The master will ignore capabilities it does not understand. */
     if (server.repl_state == REPL_STATE_SEND_CAPA) {
-        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, -1, fd, "REPLCONF",
                                      "capa", "eof", "capa", "psync2", NULL);
         if (err) goto write_error;
         sdsfree(err);
@@ -2047,7 +2050,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive CAPA reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_CAPA) {
-        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ,-1, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {

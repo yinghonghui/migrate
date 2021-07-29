@@ -441,13 +441,17 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
                     long long start = timeInMilliseconds();
                     fe->rfileProc(eventLoop, fd, fe->clientData, mask);
                     fired++;
-                    serverLog(LL_WARNING, "migrate_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                    if (timeInMilliseconds() - start > 10) {
+                        serverLog(LL_WARNING, "migrate_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                    }
                 } else {
                     if (server.import_data_client && server.import_data_client->fd == fd) {
                         long long start = timeInMilliseconds();
                         fe->rfileProc(eventLoop, fd, fe->clientData, mask);
                         fired++;
-                        serverLog(LL_WARNING, "import_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                        if (timeInMilliseconds() - start > 10) {
+                            serverLog(LL_WARNING, "import_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                        }
                     } else {
                         fe->rfileProc(eventLoop, fd, fe->clientData, mask);
                         fired++;
@@ -464,7 +468,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
                         fe->wfileProc(eventLoop, fd, fe->clientData, mask);
                         fired++;
                     }
-                    serverLog(LL_WARNING, "migrate_data AE_WRITABLE cost %lld", (timeInMilliseconds() - start));
+                    if (timeInMilliseconds() - start > 10) {
+                        serverLog(LL_WARNING, "migrate_data AE_WRITABLE cost %lld", (timeInMilliseconds() - start));
+                    }
                 } else {
                     if (server.import_data_client && server.import_data_client->fd == fd) {
                         long long start = timeInMilliseconds();
@@ -472,7 +478,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
                             fe->wfileProc(eventLoop, fd, fe->clientData, mask);
                             fired++;
                         }
-                        serverLog(LL_WARNING, "import_data AE_WRITABLE cost %lld", (timeInMilliseconds() - start));
+                        if (timeInMilliseconds() - start > 10) {
+                            serverLog(LL_WARNING, "import_data AE_WRITABLE cost %lld", (timeInMilliseconds() - start));
+                        }
                     } else {
                         if (!fired || fe->wfileProc != fe->rfileProc) {
                             fe->wfileProc(eventLoop, fd, fe->clientData, mask);
@@ -492,7 +500,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
                         fe->rfileProc(eventLoop, fd, fe->clientData, mask);
                         fired++;
                     }
-                    serverLog(LL_WARNING, "migrate_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                    if (timeInMilliseconds() - start > 10) {
+                        serverLog(LL_WARNING, "migrate_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                    }
                 } else {
                     if (server.import_data_client && server.import_data_client->fd == fd) {
                         long long start = timeInMilliseconds();
@@ -500,7 +510,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
                             fe->rfileProc(eventLoop, fd, fe->clientData, mask);
                             fired++;
                         }
-                        serverLog(LL_WARNING, "import_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                        if (timeInMilliseconds() - start > 10) {
+                            serverLog(LL_WARNING, "import_data AE_READABLE cost %lld", (timeInMilliseconds() - start));
+                        }
                     } else {
                         if (!fired || fe->wfileProc != fe->rfileProc) {
                             fe->rfileProc(eventLoop, fd, fe->clientData, mask);

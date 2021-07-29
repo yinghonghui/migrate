@@ -1387,7 +1387,7 @@ struct redisServer {
     client *import_data_client;
     time_t import_data_transfer_lastio;
     rdbSaveInfo migrateRsi;
-    client* migrate_data_client;
+    client *migrate_data_client;
 
 
     /* Mutexes used to protect atomic variables when atomic builtins are
@@ -1853,7 +1853,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask);
 
 void readSyncImportDataBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask);
 
-char *sendSynchronousCommand(int flags, int fd, ...);
+char *sendSynchronousCommand(int flags, long long timeout, int fd, ...);
 
 void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen);
 

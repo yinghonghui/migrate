@@ -3,10 +3,15 @@
 #include "server.h"
 
 void migrateDataIncrementReadTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
+    long long start = timeInMilliseconds();
     char buf[1024];
     read(fd, buf, sizeof(buf));
     aeDeleteFileEvent(server.el, fd, AE_READABLE | AE_WRITABLE);
     aeCreateFileEvent(server.el, server.migrate_data_fd, AE_WRITABLE, migrateDataWaitTarget, NULL);
+    long long end = timeInMilliseconds();
+    if (end - start > 100) {
+        serverLog(LL_WARNING, "migrateDataIncrementReadTarget %s cost %lld", buf, (end - start));
+    }
 }
 
 void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
@@ -14,7 +19,7 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (server.migrate_data_state == MIGRATE_DATA_FINISH_RDB) {
         //之前被设置为非阻塞
         serverLog(LL_WARNING, "begin accept info from target for migrate data");
-        reply = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        reply = sendSynchronousCommand(SYNC_CMD_READ, 300, fd, NULL);
         if (!strncmp(reply, "+FINISH", 7)) {
             server.migrate_data_state = MIGRATE_DATA_BEGIN_INCREMENT;
             serverLog(LL_WARNING, "target success to finish migrate data");
@@ -38,7 +43,7 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
             server.migrate_data_state = MIGRATE_DATA_INIT;
             server.migrate_data_end = timeInMilliseconds();
             linkClient(server.migrate_data_client);
-            freeClient(server.migrate_data_client);
+            freeClientAsync(server.migrate_data_client);
             server.migrate_data_end = timeInMilliseconds();
             serverLog(LL_WARNING, "success to finish to send increment data cost %lld",
                       (server.migrate_data_end - server.migrate_data_begin));
@@ -64,7 +69,7 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
                 server.migrate_data_state = MIGRATE_DATA_INIT;
                 server.migrate_data_end = timeInMilliseconds();
                 linkClient(server.migrate_data_client);
-                freeClient(server.migrate_data_client);
+                freeClientAsync(server.migrate_data_client);
                 server.migrate_data_end = timeInMilliseconds();
                 serverLog(LL_WARNING, "success to finish to send increment data cost %lld",
                           (server.migrate_data_end - server.migrate_data_begin));
@@ -79,7 +84,7 @@ void migrateDataWaitTarget(aeEventLoop *el, int fd, void *privdata, int mask) {
     listRelease(server.migrate_data_list_buf);
     aeDeleteFileEvent(server.el, fd, AE_READABLE | AE_WRITABLE);
     linkClient(server.migrate_data_client);
-    freeClient(server.migrate_data_client);
+    freeClientAsync(server.migrate_data_client);
     return;
 }
 
@@ -97,7 +102,7 @@ void startMigrateData(aeEventLoop *el, int fd, void *privdata, int mask) {
         // 表面目标节点准备开始发送数据
         ll2string(sSlot, sizeof(sSlot), server.startSlot);
         ll2string(eSlot, sizeof(eSlot), server.endSlot);
-        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "importdata", sSlot, eSlot, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, 300, fd, "importdata", sSlot, eSlot, NULL);
         if (err) {
             //失败了
             serverLog(LL_WARNING, "fail to notice target for migrate data by rdb");
@@ -112,7 +117,7 @@ void startMigrateData(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 
     if (server.migrate_data_state == MIGRATE_DATA_NOTICE_TARGET) {
-        reply = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        reply = sendSynchronousCommand(SYNC_CMD_READ, 300, fd, NULL);
         if (!strncmp(reply, "+CONTINUE", 9)) {
             serverLog(LL_WARNING, "target able to continue migrate data by rdb");
             server.migrate_data_state = MIGRATE_DATA_BEGIN_RDB;
