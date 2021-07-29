@@ -2297,7 +2297,9 @@ int rdbLoad(char *filename, rdbSaveInfo *rsi) {
 }
 
 void *importDataBackgroundJobs(void *arg) {
+    serverLog(LL_NOTICE, "import data: begin emptyMigrateDb");
     emptyMigrateDb(-1, 0, NULL);
+    serverLog(LL_NOTICE, "import data: end  emptyMigrateDb");
     if (importDataRdbLoad(server.import_data_transfer_tmpfile, &server.migrateRsi) == C_OK) {
         /* Final setup of the connected slave <- master link */
         zfree(server.import_data_transfer_tmpfile);
