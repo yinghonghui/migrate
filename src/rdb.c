@@ -2334,10 +2334,11 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
     int type, rdbver;
     redisDb *db = server.migrateDb + 0;
     char buf[1024];
-
+    serverLog(LL_WARNING, "import data: begin rioRead 1");
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
     if (rioRead(rdb, buf, 9) == 0) goto eoferr;
+    serverLog(LL_WARNING, "import data: begin rioRead 2");
     buf[9] = '\0';
     if (memcmp(buf, "REDIS", 5) != 0) {
         serverLog(LL_WARNING, "Wrong signature trying to load DB from file");
@@ -2351,6 +2352,7 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
         return C_ERR;
     }
 
+    serverLog(LL_WARNING, "import data: begin rioRead 3");
     /* Key-specific attributes, set by opcodes before the key type. */
     long long lru_idle = -1, lfu_freq = -1, expiretime = -1, now = mstime();
     long long lru_clock = LRU_CLOCK();
@@ -2547,6 +2549,7 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
         lfu_freq = -1;
         lru_idle = -1;
     }
+    serverLog(LL_WARNING, "import data: begin rioRead 5");
     /* Verify the checksum if RDB version is >= 5 */
     if (rdbver >= 5) {
         uint64_t cksum, expected = rdb->cksum;
@@ -2562,6 +2565,7 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
             }
         }
     }
+    serverLog(LL_WARNING, "import data: begin rioRead 6");
     return C_OK;
 
     eoferr: /* unexpected end of file is handled here with a fatal exit */
