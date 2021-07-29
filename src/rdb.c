@@ -2453,7 +2453,7 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
                 serverLog(LL_DEBUG, "Unrecognized RDB AUX field: '%s'",
                           (char *) auxkey->ptr);
             }
-
+            serverLog(LL_DEBUG, "import data %s", (char *) auxkey->ptr);
             decrRefCount(auxkey);
             decrRefCount(auxval);
             continue; /* Read type again. */
