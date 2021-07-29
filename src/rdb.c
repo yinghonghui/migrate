@@ -2497,6 +2497,7 @@ int importDataRdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof) {
                     exit(1);
                 }
                 if (io.ctx) {
+                    serverLog(LL_WARNING, "import data: begin io.ctx");
                     moduleFreeContext(io.ctx);
                     zfree(io.ctx);
                 }
